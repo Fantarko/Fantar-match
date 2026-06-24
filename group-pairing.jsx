@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const students = [
   { id: 1, code: "69319100001", name: "นายกวิน อ่อนชัย" },
@@ -112,46 +112,64 @@ export default function App() {
   const [tab, setTab] = useState("all");
   const [toast, setToast] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const toastTimer = useRef(null);
 
   // Load from storage on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await window.storage.get(STORAGE_KEY);
-        if (result && result.value) {
-          setPairsState(JSON.parse(result.value));
-        }
-      } catch (e) {
-        // no saved data yet
-      }
-      setLoaded(true);
-    })();
-  }, []);
+useEffect(() => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+      setPairsState(JSON.parse(saved));
+    }
+  } catch (err) {
+    console.error(err);
+  }
+
+  setLoaded(true);
+}, []);
 
   // Save to storage whenever pairs change (after loaded)
-  const setPairs = async (newPairs) => {
-    setPairsState(newPairs);
-    try {
-      await window.storage.set(STORAGE_KEY, JSON.stringify(newPairs));
-    } catch (e) {
-      console.error("Storage save failed", e);
-    }
-  };
+const setPairs = (newPairs) => {
+  setPairsState(newPairs);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
-  };
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(newPairs)
+    );
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+const showToast = (msg, type = "success") => {
+  setToast({ msg, type });
+
+  if (toastTimer.current) {
+    clearTimeout(toastTimer.current);
+  }
+
+  toastTimer.current = setTimeout(() => {
+    setToast(null);
+  }, 2500);
+};
 
   const isPaired = (id) => id in pairs;
   const getPartner = (id) => students.find((s) => s.id === pairs[id]);
 
   const handleSelect = (student) => {
     if (isPaired(student.id)) {
-      const partner = getPartner(student.id);
-      const newPairs = { ...pairs };
-      delete newPairs[student.id];
+      
+     const partner = getPartner(student.id);
+
+    const newPairs = { ...pairs };
+
+    delete newPairs[student.id];
+
+    if (partner) {
       delete newPairs[partner.id];
+}
       setPairs(newPairs);
       showToast(`ยกเลิกการจับคู่ ${getFirstName(student.name)} แล้ว`, "info");
       setSelected(null);
@@ -177,10 +195,20 @@ export default function App() {
   };
 
   const clearAll = () => {
-    setPairs({});
-    setSelected(null);
-    showToast("ล้างการจับคู่ทั้งหมดแล้ว", "info");
-  };
+  const ok = window.confirm(
+    "ต้องการล้างการจับคู่ทั้งหมดใช่หรือไม่?"
+  );
+
+  if (!ok) return;
+
+  setPairs({});
+  setSelected(null);
+
+  showToast(
+    "ล้างการจับคู่ทั้งหมดแล้ว",
+    "info"
+  );
+};
 
   if (!loaded) {
     return (
@@ -205,14 +233,18 @@ export default function App() {
   // Group pairs for display
   const pairGroups = [];
   const seen = new Set();
-  students.forEach((s) => {
-    if (isPaired(s.id) && !seen.has(s.id)) {
-      const partner = getPartner(s.id);
-      pairGroups.push([s, partner]);
-      seen.add(s.id);
-      seen.add(partner.id);
-    }
-  });
+students.forEach((s) => {
+  if (!isPaired(s.id) || seen.has(s.id)) return;
+
+  const partner = getPartner(s.id);
+
+  if (!partner) return;
+
+  pairGroups.push([s, partner]);
+
+  seen.add(s.id);
+  seen.add(partner.id);
+});
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f0f1a", fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", color: "#e2e8f0" }}>
